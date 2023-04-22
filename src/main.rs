@@ -4,18 +4,21 @@ mod hit;
 mod sphere;
 mod camera;
 mod mat;
+mod aabb;
+mod bvh;
 
 use std::{io::{stderr, Write}};
 use rand::Rng;
 use rayon::prelude::*;
 use vec::{Vec3, Point3, Color};
 use ray::Ray;
-use hit::{Hit, World};
+use hit::Hit;
 use sphere::{Sphere, MovingSphere};
 use camera::Camera;
 use mat::{Lambertian, Metal, Dielectric};
+use bvh::BVH;
 
-fn ray_color(ray: &Ray, world: &World, depth: u64) -> Color {
+fn ray_color(ray: &Ray, world: &Box<dyn Hit>, depth: u64) -> Color {
     if depth <= 0 {
         // if we've exceeded the ray bounce limit, no more light is gathered
         return Color::new(0.0, 0.0, 0.0)
@@ -47,9 +50,9 @@ fn ray_color(ray: &Ray, world: &World, depth: u64) -> Color {
     }
 }
 
-fn random_scene() -> World{
+fn random_scene() -> Box<dyn Hit>{
     let mut rng = rand::thread_rng();
-    let mut world = World::new();
+    let mut world: Vec<Box<dyn Hit>> = Vec::new();
 
     let ground_mat = Lambertian::new(Color::new(0.5,0.5,0.5));
     let ground_sphere = Sphere::new(Point3::new(0.0,-1000.0,0.0),1000.0,ground_mat);
@@ -67,8 +70,8 @@ fn random_scene() -> World{
                 //Diffuse
                 let albedo = Color::random(0.0..1.0)*Color::random(0.0..1.0);
                 let sphere_mat = Lambertian::new(albedo);
-                let center1 = center+Vec3::new(rng.gen_range(-0.1..0.1), rng.gen_range(0.0..0.5), 0.0);
-                let sphere = MovingSphere::new(center,center1,0.0,1.0,0.2,sphere_mat);
+                // let center1 = center+Vec3::new(rng.gen_range(-0.1..0.1), rng.gen_range(0.0..0.5), 0.0);
+                let sphere = Sphere::new(center, 0.2 ,sphere_mat);
 
                 world.push(Box::new(sphere));
             }else if choose_mat<0.95{
@@ -101,7 +104,7 @@ fn random_scene() -> World{
     world.push(Box::new(sphere2));
     world.push(Box::new(sphere3));
 
-    world
+    Box::new(BVH::new(world, 0.0, 1.0))
 
 }
 
@@ -110,8 +113,8 @@ fn main() {
     const ASPECT_RATIO: f64 = 3.0 / 2.0;
     const IMAGE_WIDTH: u64 = 1500;
     const IMAGE_HEIGHT: u64 = ((IMAGE_WIDTH as f64) / ASPECT_RATIO) as u64;
-    const SAMPLES_PER_PIXEL:u64 = 300;
-    const MAX_DEPTH:u64 = 30;
+    const SAMPLES_PER_PIXEL:u64 = 600;
+    const MAX_DEPTH:u64 = 50;
 
     // world
     // let mut world = World::new();
@@ -143,7 +146,7 @@ fn main() {
     let dist_to_focus = 10.0;
     let aperture = 0.1;
 
-    let camera = Camera::new(lookfrom, lookat, vup, 20.0, ASPECT_RATIO, aperture, dist_to_focus,0.2,0.6);
+    let camera = Camera::new(lookfrom, lookat, vup, 20.0, ASPECT_RATIO, aperture, dist_to_focus,0.0,1.0);
     // let viewport_height = 2.0;
     // let viewport_width = viewport_height * ASPECT_RATIO;
     // let focal_length = 1.0;
