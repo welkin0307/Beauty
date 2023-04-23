@@ -1,5 +1,5 @@
 use std::f64;
-use rayon::iter::Positions;
+
 
 use super::vec::Vec3;
 use super::ray::Ray;

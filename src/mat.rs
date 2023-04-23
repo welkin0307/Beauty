@@ -1,33 +1,49 @@
 use rand::Rng;
-
+use std::f64;
 use super::vec::{Vec3, Color};
 use super::ray::Ray;
 use super::hit::{HitRecord};
 use super::texture::Texture;
 use super::vec::Point3;
+use super::onb::ONB;
 
 pub trait Material: Sync {
-    fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Color, Ray)>;
+    // old method
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
+        None
+    }
 
-    fn emitted(&self, u:f64, v:f64, p:&Point3) -> Color{
-        Color::new(0.0,0.0,0.0)
+    //mc method
+    fn scatter_mc_method(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Color, Ray, f64)> {
+        None
+    }
+
+    fn scattering_pdf(&self, r_in: &Ray, rec: &HitRecord, scattered: &Ray) -> f64 {
+        0.0
+    }
+
+    fn emitted(&self, rec: &HitRecord) -> Color {
+        Color::new(0.0, 0.0, 0.0)
     }
 }
 
+
 #[derive(Clone)]
-pub struct Lambertian<T:Texture> {
+pub struct Lambertian<T: Texture> {
     albedo: T
 }
 
-impl<T:Texture> Lambertian<T> {
+impl<T: Texture> Lambertian<T> {
     pub fn new(albedo: T) -> Lambertian<T> {
         Lambertian {
             albedo
         }
     }
+
+
 }
 
-impl<T:Texture> Material for Lambertian<T> {
+impl<T: Texture> Material for Lambertian<T> {
     fn scatter(&self, _r_in: &Ray, rec: &HitRecord) -> Option<(Color, Ray)> {
         let mut scatter_direction = rec.normal + Vec3::random_in_unit_sphere().normalized();
         if scatter_direction.near_zero() {
@@ -39,7 +55,32 @@ impl<T:Texture> Material for Lambertian<T> {
 
         Some((self.albedo.mapping(rec.u, rec.v, &rec.position), scattered))
     }
+
+    fn scatter_mc_method(&self, _r_in: &Ray, rec: &HitRecord) -> Option<(Color, Ray, f64)> {
+        let uvw = ONB::build_from_w(&rec.normal);
+        let mut scatter_direction = uvw.local(&Vec3::random_cosine_direction());
+        
+        if scatter_direction.near_zero() {
+            // Catch degenerate scatter direction
+            scatter_direction = rec.normal;
+        }
+
+        let scattered = Ray::new(rec.position, scatter_direction, _r_in.time());
+
+        // importance sampling
+        //let pdf = rec.normal.dot(scattered.direction()) / f64::consts::PI;
+        //let pdf = 0.5 / f64::consts::PI;
+        let pdf = uvw.w().dot(scattered.direction()) / f64::consts::PI;
+
+        Some((self.albedo.mapping(rec.u, rec.v, &rec.position), scattered, pdf))
+    }
+
+    fn scattering_pdf(&self, r_in: &Ray, rec: &HitRecord, scattered: &Ray) -> f64 {
+        let cosine = rec.normal.dot(scattered.direction().normalized()).max(0.0);
+        cosine / f64::consts::PI
+    }
 }
+
 
 #[derive(Clone)]
 pub struct Metal {
@@ -69,22 +110,23 @@ impl Material for Metal {
     }
 }
 
+
 #[derive(Clone)]
-pub struct Dielectric{
-    ir:f64
+pub struct Dielectric {
+    ir: f64
 }
 
 impl Dielectric {
-    pub fn new(index_of_refraction: f64) -> Dielectric{
+    pub fn new(index_of_refraction: f64) -> Dielectric {
         Dielectric { 
-            ir: index_of_refraction 
+            ir: index_of_refraction
         }
     }
-    
-    fn reflectance(cosine:f64, index_of_refraction: f64) -> f64{
+
+    fn reflectance(cosine: f64, index_of_refraction: f64) -> f64 {
         // use Schlick's approximation
-        let r0 = ((1.0 - index_of_refraction)/(1.0+index_of_refraction)).powi(2);
-        r0 + (1.0-r0)*(1.0-cosine).powi(5)
+        let r0 = ((1.0 - index_of_refraction) / (1.0 + index_of_refraction)).powi(2);
+        r0 + (1.0 - r0) * (1.0 - cosine).powi(5)
     }
 }
 
@@ -111,7 +153,7 @@ impl Material for Dielectric {
             unit_direction.refract(rec.normal, refraction_ratio)
         };
 
-        let scattered = Ray::new(rec.position, direction,r_in.time());
+        let scattered = Ray::new(rec.position, direction, r_in.time());
         Some((Color::new(1.0, 1.0, 1.0), scattered))
     }
 }
@@ -134,8 +176,12 @@ impl<T: Texture> Material for DiffuseLight<T> {
         None
     }
 
-    fn emitted(&self, u: f64, v: f64, p: &Point3) -> Color {
-        self.emit.mapping(u, v, p)
+    fn emitted(&self, rec: &HitRecord) -> Color {
+        if rec.front_face {
+            self.emit.mapping(rec.u, rec.v, &rec.position)
+        } else {
+            Color::new(0.0, 0.0, 0.0)
+        }
     }
 }
 
