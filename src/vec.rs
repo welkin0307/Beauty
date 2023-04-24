@@ -94,18 +94,6 @@ impl Vec3 {
         }
     }
 
-    pub fn random_cosine_direction() -> Vec3 {
-        let mut rng = rand::thread_rng();
-        let r1 = rng.gen::<f64>();
-        let r2 = rng.gen::<f64>();
-        let z = (1.0 - r2).sqrt();
-        let phi = 2.0 * f64::consts::PI * r1;
-        let x= f64::cos(phi) * r2.sqrt();
-        let y = f64::sin(phi) * r2.sqrt();
-    
-        Vec3::new(x, y, z)
-    }    
-
     pub fn near_zero(self)-> bool{
         const EPS:f64 = 1.0e-8;
         self[0].abs()< EPS&&self[1].abs()<EPS&&self[2].abs()<EPS
